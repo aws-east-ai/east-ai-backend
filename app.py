@@ -39,24 +39,26 @@ patterns = {
 }
 
 
-@app.post("/write-marketing-text")
+@app.post("/api/write-marketing-text")
 def write_marketing_text(item: dict):
     history = item["history"] if "history" in item else []
-    if history:
-        print("HHHHHHHHHistory")
     pattern = item["pattern"]
     prompt_pattern = patterns[pattern]
     prompt = item["prompt"]
     prompt = prompt if history else prompt_pattern + "\n\n" + prompt
-    print("------prompt---------")
-    print(prompt)
-    print("------end---------")
-    print("------history---------")
-    print(history)
-    print("------end---------")
     return llm_predictor.predict({"inputs": prompt, "parameters": {"history": history}})
 
 
 @app.get("/")
 def home():
     return "Hello world"
+
+
+@app.post("/api/upload")
+def upload():
+    pass
+
+
+@app.post("/api/product-design")
+def productDesign():
+    pass
