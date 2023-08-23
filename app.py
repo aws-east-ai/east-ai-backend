@@ -27,7 +27,7 @@ llm_predictor = HuggingFacePredictor(
 )
 
 pd_predictor = HuggingFacePredictor(
-    endpoint_name="product-design-sd-2023-08-16-08-18-44-842"
+    endpoint_name="product-design-sd-2023-08-22-07-19-27-962"
 )
 
 patterns = {
@@ -65,14 +65,16 @@ def upload():
 
 @app.post("/api/product-design")
 def productDesign(item: dict):
+    # 这里还需更细致的校验
     print(item)
 
-    # 这里还需更细致的校验
-    item["steps"] = int(item["steps"])
-    item["seed"] = int(item["seed"])
-    item["height"] = int(item["height"])
-    item["width"] = int(item["width"])
-    item["count"] = int(item["count"])
+    item["steps"] = int(item["steps"]) or 30
+    item["seed"] = int(item["seed"]) or -1
+    item["height"] = int(item["height"]) or 512
+    item["width"] = int(item["width"]) or 512
+    item["count"] = int(item["count"]) or 1
+
+    print(item)
 
     # item["steps"] = int(item["steps"])
     # inputs = {
