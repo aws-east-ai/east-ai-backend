@@ -1,6 +1,13 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sagemaker.huggingface.model import HuggingFacePredictor
+from fastapi import UploadFile
+from PIL import Image
+from io import BytesIO
+import boto3
+from datetime import datetime
+import uuid
+
 
 # from dotenv import load_dotenv
 # import git
@@ -58,11 +65,6 @@ def home():
     return "Hello world"
 
 
-@app.post("/api/upload")
-def upload():
-    pass
-
-
 @app.post("/api/product-design")
 def productDesign(item: dict):
     # 这里还需更细致的校验
@@ -88,3 +90,35 @@ def productDesign(item: dict):
     #     "count": 1,
     # }
     return pd_predictor.predict(item)
+
+
+@app.post("/api/upload")
+async def upload(file: UploadFile):
+    print(file)
+    contents = await file.read()
+    try:
+        image = Image.open(BytesIO(contents))
+    except:
+        return {"success": False, "message": "需要上传合法的图片。"}
+
+    # image = resize_image_for_ai(image)
+
+    rnd_key = str(uuid.uuid4())
+    now = datetime.now()
+    year_str = now.strftime("%Y")
+    day_str = now.strftime("%m%d")
+    path_str = f"{year_str}{day_str}/"
+    key_original = path_str + rnd_key + ".webp"
+
+    buffer = BytesIO()
+    image.save(buffer, format="WEBP")
+    img_byte_arr = buffer.getvalue()
+
+    s3 = boto3.resource("s3")
+    s3.Bucket("east-ai-workshop").put_object(
+        Key=f"images/{key_original}", Body=img_byte_arr
+    )
+
+    # image.save("./x.webp", format="WEBP")
+
+    return {"success": True, "data": f"s3://east-ai-workshop/images/{key_original}"}
