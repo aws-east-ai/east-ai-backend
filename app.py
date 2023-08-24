@@ -37,6 +37,8 @@ pd_predictor = HuggingFacePredictor(
     endpoint_name="product-design-sd-2023-08-22-07-19-27-962"
 )
 
+translate_client = boto3.client('translate')
+
 patterns = {
     "redbook": "请根据下面的内容写一段小红书的种草文案: ",
     "zhihu": "请根据下面的内容写一段知乎的文章: ",
@@ -69,6 +71,18 @@ def home():
 def productDesign(item: dict):
     # 这里还需更细致的校验
     print(item)
+
+    # 调用 translate 对 prompt 和 negative_prompt 进行翻译
+    prompt_res = translate_client.translate_text(Text=item["prompt"],
+                                                 SourceLanguageCode='auto',
+                                                 TargetLanguageCode='en')
+    item["prompt"] = prompt_res["TranslatedText"]
+
+    if item["negative_prompt"]:
+        neg_prompt_res = translate_client.translate_text(Text=item["negative_prompt"],
+                                                         SourceLanguageCode='auto',
+                                                         TargetLanguageCode='en')
+        item["negative_prompt"] = neg_prompt_res["TranslatedText"]
 
     item["steps"] = int(item["steps"]) or 30
     item["seed"] = int(item["seed"]) or -1
