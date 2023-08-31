@@ -29,15 +29,14 @@ app.add_middleware(
 # git_token = os.getenv("GIT_TOKEN")
 
 
-llm_predictor = HuggingFacePredictor(
-    endpoint_name="chatglm2-lmi-model-2023-08-16-08-23-01-220"
-)
+llm_predictor = HuggingFacePredictor(endpoint_name="chatglm2-lmi-model")
+pd_predictor = HuggingFacePredictor(endpoint_name="product-design-sd")
+sam_predictor = HuggingFacePredictor(endpoint_name="grounded-sam")
+inpaint_predictor = HuggingFacePredictor(endpoint_name="inpainting-sd")
 
-pd_predictor = HuggingFacePredictor(
-    endpoint_name="product-design-sd-2023-08-22-07-19-27-962"
-)
+translate_client = boto3.client("translate")
 
-translate_client = boto3.client('translate')
+s3_bucket = "east-ai-workshop"
 
 patterns = {
     "redbook": "请根据下面的内容写一段小红书的种草文案: ",
@@ -68,20 +67,22 @@ def home():
 
 
 @app.post("/api/product-design")
-def productDesign(item: dict):
+def product_design(item: dict):
     # 这里还需更细致的校验
     print(item)
 
     # 调用 translate 对 prompt 和 negative_prompt 进行翻译
-    prompt_res = translate_client.translate_text(Text=item["prompt"],
-                                                 SourceLanguageCode='auto',
-                                                 TargetLanguageCode='en')
+    prompt_res = translate_client.translate_text(
+        Text=item["prompt"], SourceLanguageCode="auto", TargetLanguageCode="en"
+    )
     item["prompt"] = prompt_res["TranslatedText"]
 
     if item["negative_prompt"]:
-        neg_prompt_res = translate_client.translate_text(Text=item["negative_prompt"],
-                                                         SourceLanguageCode='auto',
-                                                         TargetLanguageCode='en')
+        neg_prompt_res = translate_client.translate_text(
+            Text=item["negative_prompt"],
+            SourceLanguageCode="auto",
+            TargetLanguageCode="en",
+        )
         item["negative_prompt"] = neg_prompt_res["TranslatedText"]
 
     item["steps"] = int(item["steps"]) or 30
@@ -89,6 +90,7 @@ def productDesign(item: dict):
     item["height"] = int(item["height"]) or 512
     item["width"] = int(item["width"]) or 512
     item["count"] = int(item["count"]) or 1
+    item["output_image_dir"] = f"s3://{s3_bucket}/product-images/"
 
     print(item)
 
@@ -129,10 +131,55 @@ async def upload(file: UploadFile):
     img_byte_arr = buffer.getvalue()
 
     s3 = boto3.resource("s3")
-    s3.Bucket("east-ai-workshop").put_object(
-        Key=f"images/{key_original}", Body=img_byte_arr
-    )
+    s3.Bucket(s3_bucket).put_object(Key=f"images/{key_original}", Body=img_byte_arr)
 
     # image.save("./x.webp", format="WEBP")
 
-    return {"success": True, "data": f"s3://east-ai-workshop/images/{key_original}"}
+    return {"success": True, "data": f"s3://{s3_bucket}/images/{key_original}"}
+
+
+@app.post("/api/inpaint")
+async def inpaint(item: dict):
+    assert "input_image" in item
+    assert "sam_prompt" in item
+    output_mask_image_dir = f"s3://{s3_bucket}/mask-images/"
+
+    sam_prompt_res = translate_client.translate_text(
+        Text=item["sam_prompt"], SourceLanguageCode="auto", TargetLanguageCode="en"
+    )
+
+    mask_res = sam_predictor.predict(
+        {
+            "input_image": item["input_image"],
+            "prompt": sam_prompt_res["TranslatedText"],
+            "output_mask_image_dir": output_mask_image_dir,
+        }
+    )
+
+    print(mask_res)
+
+    # 调用 translate 对 prompt 和 negative_prompt 进行翻译
+    prompt_res = translate_client.translate_text(
+        Text=item["prompt"], SourceLanguageCode="auto", TargetLanguageCode="en"
+    )
+
+    if item["negative_prompt"]:
+        neg_prompt_res = translate_client.translate_text(
+            Text=item["negative_prompt"],
+            SourceLanguageCode="auto",
+            TargetLanguageCode="en",
+        )
+
+    return inpaint_predictor.predict(
+        {
+            "prompt": prompt_res["TranslatedText"] or item["prompt"],
+            "negative_prompt": neg_prompt_res["TranslatedText"]
+            or item["negative_prompt"],
+            "input_image": item["input_image"],
+            "input_mask_image": mask_res["result"],
+            "steps": int(item["steps"]) or 30,
+            "sampler": item["sampler"],
+            "seed": int(item["seed"]) or -1,
+            "count": int(item["count"]) or 1,
+        }
+    )
