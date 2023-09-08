@@ -1,8 +1,8 @@
 annotated-types==0.5.0
 anyio==3.7.1
 attrs==23.1.0
-boto3==1.28.28
-botocore==1.31.28
+boto3==1.28.42
+botocore==1.31.42
 click==8.1.7
 cloudpickle==2.2.1
 contextlib2==21.6.0
@@ -46,4 +46,5 @@ typing_extensions==4.7.1
 tzdata==2023.3
 urllib3==1.26.16
 uvicorn==0.23.2
+websockets==11.0.3
 zipp==3.16.2

@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from sagemaker.huggingface.model import HuggingFacePredictor
 from fastapi import UploadFile
@@ -7,6 +7,28 @@ from io import BytesIO
 import boto3
 from datetime import datetime
 import uuid
+import json
+import io
+
+
+class StreamScanner:
+    def __init__(self):
+        self.buff = io.BytesIO()
+        self.read_pos = 0
+
+    def write(self, content):
+        self.buff.seek(0, io.SEEK_END)
+        self.buff.write(content)
+
+    def readlines(self):
+        self.buff.seek(self.read_pos)
+        for line in self.buff.readlines():
+            if line[-1] != b"\n":
+                self.read_pos += len(line)
+                yield line[:-1]
+
+    def reset(self):
+        self.read_pos = 0
 
 
 # from dotenv import load_dotenv
@@ -34,6 +56,11 @@ pd_predictor = HuggingFacePredictor(endpoint_name="product-design-sd")
 sam_predictor = HuggingFacePredictor(endpoint_name="grounded-sam")
 inpaint_predictor = HuggingFacePredictor(endpoint_name="inpainting-sd")
 
+# stream chat bot
+smr = boto3.client("sagemaker-runtime")
+parameters = {"max_length": 4092, "temperature": 0.01, "top_p": 0.8}
+glm_entry_point = "chatglm2-lmi-model"
+
 translate_client = boto3.client("translate")
 
 s3_bucket = "east-ai-workshop"
@@ -58,7 +85,54 @@ def write_marketing_text(item: dict):
     prompt_pattern = patterns[pattern]
     prompt = item["prompt"]
     prompt = prompt if history else prompt_pattern + "\n\n" + prompt
-    return llm_predictor.predict({"inputs": prompt, "parameters": {"history": history}})
+    res = llm_predictor.predict({"inputs": prompt, "parameters": {"history": history}})
+    print(res)
+    return res
+
+
+@app.websocket("/api/chat-bot")
+async def chat_bot(websocket: WebSocket):
+    await websocket.accept()
+    while True:
+        data = await websocket.receive_text()
+        # TODO: error handle
+        item = json.loads(data)
+        history = item["history"] if "history" in item else []
+        pattern = item["pattern"]
+        prompt_pattern = patterns[pattern]
+        prompt = item["prompt"]
+        prompt = prompt if history else prompt_pattern + "\n\n" + prompt
+
+        response_model = smr.invoke_endpoint_with_response_stream(
+            EndpointName=glm_entry_point,
+            Body=json.dumps(
+                {"inputs": prompt, "parameters": parameters, "history": history}
+            ),
+            ContentType="application/json",
+        )
+
+        event_stream = response_model["Body"]
+        scanner = StreamScanner()
+        resp = {}
+        for event in event_stream:
+            scanner.write(event["PayloadPart"]["Bytes"])
+            for line in scanner.readlines():
+                try:
+                    resp = json.loads(line)["outputs"]
+                    print(resp)
+                    await websocket.send_text(resp["outputs"])
+                    # print(resp.get("outputs")['outputs'], end='')
+                except Exception as e:
+                    # print(line)
+                    continue
+        result_end = (
+            '{"status": "done", "history": '
+            + json.dumps(resp["history"], ensure_ascii=False)
+            + "}"
+        )
+        print("--------- end -------")
+        print(result_end)
+        await websocket.send_text(result_end)
 
 
 @app.get("/")
