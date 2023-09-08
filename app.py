@@ -3,12 +3,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from sagemaker.huggingface.model import HuggingFacePredictor
 from fastapi import UploadFile
 from PIL import Image
+import io
 from io import BytesIO
 import boto3
 from datetime import datetime
 import uuid
 import json
-import io
+import os
 
 
 class StreamScanner:
@@ -63,7 +64,7 @@ glm_entry_point = "chatglm2-lmi-model"
 
 translate_client = boto3.client("translate")
 
-s3_bucket = "east-ai-workshop"
+s3_bucket = os.environ.get("WORKSHOP_IMAGE_BUCKET") or "east-ai-workshop"
 
 patterns = {
     "redbook": "请根据下面的内容写一段小红书的种草文案: ",
@@ -86,7 +87,6 @@ def write_marketing_text(item: dict):
     prompt = item["prompt"]
     prompt = prompt if history else prompt_pattern + "\n\n" + prompt
     res = llm_predictor.predict({"inputs": prompt, "parameters": {"history": history}})
-    print(res)
     return res
 
 
@@ -95,13 +95,17 @@ async def chat_bot(websocket: WebSocket):
     await websocket.accept()
     while True:
         data = await websocket.receive_text()
-        # TODO: error handle
+
+        # TODO: error handle，如果不是 json 格式则会报错
         item = json.loads(data)
         history = item["history"] if "history" in item else []
         pattern = item["pattern"]
         prompt_pattern = patterns[pattern]
         prompt = item["prompt"]
         prompt = prompt if history else prompt_pattern + "\n\n" + prompt
+
+        question = {"status": "begin", "question": prompt}
+        await websocket.send_text(json.dumps(question, ensure_ascii=False))
 
         response_model = smr.invoke_endpoint_with_response_stream(
             EndpointName=glm_entry_point,
@@ -119,19 +123,16 @@ async def chat_bot(websocket: WebSocket):
             for line in scanner.readlines():
                 try:
                     resp = json.loads(line)["outputs"]
-                    print(resp)
                     await websocket.send_text(resp["outputs"])
-                    # print(resp.get("outputs")['outputs'], end='')
                 except Exception as e:
-                    # print(line)
                     continue
         result_end = (
             '{"status": "done", "history": '
             + json.dumps(resp["history"], ensure_ascii=False)
             + "}"
         )
-        print("--------- end -------")
-        print(result_end)
+        # print("--------- end -------")
+        # print(result_end)
         await websocket.send_text(result_end)
 
 
@@ -143,7 +144,6 @@ def home():
 @app.post("/api/product-design")
 def product_design(item: dict):
     # 这里还需更细致的校验
-    print(item)
 
     # 调用 translate 对 prompt 和 negative_prompt 进行翻译
     prompt_res = translate_client.translate_text(
@@ -166,25 +166,11 @@ def product_design(item: dict):
     item["count"] = int(item["count"]) or 1
     item["output_image_dir"] = f"s3://{s3_bucket}/product-images/"
 
-    print(item)
-
-    # item["steps"] = int(item["steps"])
-    # inputs = {
-    #     "prompt": "3D product render, futuristic armchair, finely detailed, purism, ue 5, a computer rendering, minimalism, octane render, 4k",
-    #     "negative_prompt": "EasyNegative, (worst quality:2), (low quality:2), (normal quality:2), lowres, ((monochrome)), ((grayscale)), cropped, text, jpeg artifacts, signature, watermark, username, sketch, cartoon, drawing, anime, duplicate, blurry, semi-realistic, out of frame, ugly, deformed",
-    #     "steps": 30,
-    #     "sampler": "dpm2_a",
-    #     "seed": -1,
-    #     "height": 512,
-    #     "width": 512,
-    #     "count": 1,
-    # }
     return pd_predictor.predict(item)
 
 
 @app.post("/api/upload")
 async def upload(file: UploadFile):
-    print(file)
     contents = await file.read()
     try:
         image = Image.open(BytesIO(contents))
@@ -229,8 +215,6 @@ async def inpaint(item: dict):
             "output_mask_image_dir": output_mask_image_dir,
         }
     )
-
-    print(mask_res)
 
     # 调用 translate 对 prompt 和 negative_prompt 进行翻译
     prompt_res = translate_client.translate_text(
