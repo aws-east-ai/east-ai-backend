@@ -1,6 +1,7 @@
 from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from sagemaker.huggingface.model import HuggingFacePredictor
+from fastapi.responses import StreamingResponse
 from fastapi import UploadFile
 from PIL import Image
 import io
@@ -12,6 +13,7 @@ import json
 import os
 
 
+# 解析 stream
 class StreamScanner:
     def __init__(self):
         self.buff = io.BytesIO()
@@ -32,12 +34,43 @@ class StreamScanner:
         self.read_pos = 0
 
 
-# from dotenv import load_dotenv
-# import git
-# import os
-# import subprocess
+# 图片大小修改,并设置成 8 的倍数
+def sd_resize_image(image: Image.Image, length=768):
+    w, h = image.size
+    # print("ori-size: ", (w,h))
+    corp = (0, 0, w, h)
+    if w > h:
+        h = int((length * h / w))
+        w = length
+        ah = int(h / 8.0) * 8
+        corp = (0, int((h - ah) / 2), w, ah + int((h - ah) / 2))
+    elif w < h:
+        w = int((length * w / h))
+        h = length
+        aw = int(w / 8.0) * 8
+        corp = (int((w - aw) / 2), 0, int((w - aw) / 2) + aw, h)
+    else:
+        w = h = length
+    rtn = image.resize((w, h), resample=Image.LANCZOS)
+    if w % 8 != 0 or h % 8 != 0:
+        rtn = rtn.crop(corp)
+    return rtn
 
-# load_dotenv()
+
+ext_mimes = {
+    ".webp": "image/webp",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+}
+
+
+# 扩展名转化为 mime，只转化 图片类型
+def get_mime_type(ext: str):
+    # return ext_mimes[ext.lower()] or "application/octet-stream"
+    return ext_mimes[ext.lower()] or None
+
+
 app = FastAPI()
 
 app.add_middleware(
@@ -59,6 +92,7 @@ inpaint_predictor = HuggingFacePredictor(endpoint_name="inpainting-sd")
 
 # stream chat bot
 smr = boto3.client("sagemaker-runtime")
+s3 = boto3.resource("s3")
 parameters = {"max_length": 4092, "temperature": 0.01, "top_p": 0.8}
 glm_entry_point = "chatglm2-lmi-model"
 
@@ -177,7 +211,7 @@ async def upload(file: UploadFile):
     except:
         return {"success": False, "message": "需要上传合法的图片。"}
 
-    # image = resize_image_for_ai(image)
+    image = sd_resize_image(image, length=512)
 
     rnd_key = str(uuid.uuid4())
     now = datetime.now()
@@ -190,10 +224,7 @@ async def upload(file: UploadFile):
     image.save(buffer, format="WEBP")
     img_byte_arr = buffer.getvalue()
 
-    s3 = boto3.resource("s3")
     s3.Bucket(s3_bucket).put_object(Key=f"images/{key_original}", Body=img_byte_arr)
-
-    # image.save("./x.webp", format="WEBP")
 
     return {"success": True, "data": f"s3://{s3_bucket}/images/{key_original}"}
 
@@ -241,3 +272,24 @@ async def inpaint(item: dict):
             "count": int(item["count"]) or 1,
         }
     )
+
+
+@app.get("/api/s3-image/{s3_url:path}")
+async def render_image_from_s3(s3_url: str | None):
+    split_tup = os.path.splitext(s3_url)
+    media_type = get_mime_type(split_tup[1])
+    # 只允许特定的扩展名
+    if not media_type:
+        return None
+    # 解析 bucket 和 key
+    s3_urls = s3_url.replace("s3://", "").replace("s3:/", "").split("/")
+    print("vvv|||", s3_url, s3_urls)
+    n_bucket = s3_urls[0]
+    key = s3_url.replace("s3://" + s3_bucket + "/", "").replace(
+        "s3:/" + s3_bucket + "/", ""
+    )
+
+    xobject = s3.Object(n_bucket, key).get()
+    img_bytes = xobject["Body"].read()
+    image_stream = io.BytesIO(img_bytes)
+    return StreamingResponse(content=image_stream, media_type=media_type)
