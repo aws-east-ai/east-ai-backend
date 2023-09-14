@@ -275,7 +275,7 @@ async def inpaint(item: dict):
 
 
 @app.get("/api/s3-image/{s3_url:path}")
-async def render_image_from_s3(s3_url: str | None):
+async def render_image_from_s3(s3_url: str):
     split_tup = os.path.splitext(s3_url)
     media_type = get_mime_type(split_tup[1])
     # 只允许特定的扩展名
