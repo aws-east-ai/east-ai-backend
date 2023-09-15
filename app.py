@@ -183,7 +183,11 @@ def product_design(item: dict):
     prompt_res = translate_client.translate_text(
         Text=item["prompt"], SourceLanguageCode="auto", TargetLanguageCode="en"
     )
-    item["prompt"] = prompt_res["TranslatedText"]
+    item["prompt"] = (
+        "3D product render,"
+        + prompt_res["TranslatedText"]
+        + ",finely detailed, purism, ue 5, a computer rendering, minimalism, octane render, 4k"
+    )
 
     if item["negative_prompt"]:
         neg_prompt_res = translate_client.translate_text(
@@ -200,6 +204,7 @@ def product_design(item: dict):
     item["count"] = int(item["count"]) or 1
     item["output_image_dir"] = f"s3://{s3_bucket}/product-images/"
 
+    print(item)
     return pd_predictor.predict(item)
 
 
