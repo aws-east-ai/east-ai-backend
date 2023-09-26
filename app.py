@@ -1,4 +1,4 @@
-from fastapi import FastAPI, WebSocket
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from sagemaker.huggingface.model import HuggingFacePredictor
 from fastapi.responses import StreamingResponse
@@ -11,6 +11,9 @@ from datetime import datetime
 import uuid
 import json
 import os
+
+
+app = FastAPI()
 
 
 # 解析 stream
@@ -32,6 +35,55 @@ class StreamScanner:
 
     def reset(self):
         self.read_pos = 0
+
+
+@app.websocket("/api/chat-bot")
+async def chat_bot(websocket: WebSocket):
+    # websocket.on_disconnect()
+    # await manager.connect(websocket)
+    await websocket.accept()
+    try:
+        while True:
+            data = await websocket.receive_text()
+
+            # TODO: error handle，如果不是 json 格式则会报错
+            item = json.loads(data)
+            history = item["history"] if "history" in item else []
+            pattern = item["pattern"]
+            prompt_pattern = patterns[pattern]
+            prompt = item["prompt"]
+            prompt = prompt if history else prompt_pattern + "\n\n" + prompt
+
+            question = {"status": "begin", "question": prompt}
+            await websocket.send_text(json.dumps(question, ensure_ascii=False))
+
+            response_model = smr.invoke_endpoint_with_response_stream(
+                EndpointName=glm_entry_point,
+                Body=json.dumps(
+                    {"inputs": prompt, "parameters": parameters, "history": history}
+                ),
+                ContentType="application/json",
+            )
+
+            event_stream = response_model["Body"]
+            scanner = StreamScanner()
+            resp = {}
+            for event in event_stream:
+                scanner.write(event["PayloadPart"]["Bytes"])
+                for line in scanner.readlines():
+                    try:
+                        resp = json.loads(line)["outputs"]
+                        await websocket.send_text(resp["outputs"])
+                    except Exception as e:
+                        continue
+            result_end = (
+                '{"status": "done", "history": '
+                + json.dumps(resp["history"], ensure_ascii=False)
+                + "}"
+            )
+            await websocket.send_text(result_end)
+    except WebSocketDisconnect:
+        print(f"Client left")
 
 
 # 图片大小修改,并设置成 8 的倍数
@@ -70,8 +122,6 @@ def get_mime_type(ext: str):
     # return ext_mimes[ext.lower()] or "application/octet-stream"
     return ext_mimes[ext.lower()] or None
 
-
-app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
@@ -124,52 +174,6 @@ def write_marketing_text(item: dict):
     return res
 
 
-@app.websocket("/api/chat-bot")
-async def chat_bot(websocket: WebSocket):
-    await websocket.accept()
-    while True:
-        data = await websocket.receive_text()
-
-        # TODO: error handle，如果不是 json 格式则会报错
-        item = json.loads(data)
-        history = item["history"] if "history" in item else []
-        pattern = item["pattern"]
-        prompt_pattern = patterns[pattern]
-        prompt = item["prompt"]
-        prompt = prompt if history else prompt_pattern + "\n\n" + prompt
-
-        question = {"status": "begin", "question": prompt}
-        await websocket.send_text(json.dumps(question, ensure_ascii=False))
-
-        response_model = smr.invoke_endpoint_with_response_stream(
-            EndpointName=glm_entry_point,
-            Body=json.dumps(
-                {"inputs": prompt, "parameters": parameters, "history": history}
-            ),
-            ContentType="application/json",
-        )
-
-        event_stream = response_model["Body"]
-        scanner = StreamScanner()
-        resp = {}
-        for event in event_stream:
-            scanner.write(event["PayloadPart"]["Bytes"])
-            for line in scanner.readlines():
-                try:
-                    resp = json.loads(line)["outputs"]
-                    await websocket.send_text(resp["outputs"])
-                except Exception as e:
-                    continue
-        result_end = (
-            '{"status": "done", "history": '
-            + json.dumps(resp["history"], ensure_ascii=False)
-            + "}"
-        )
-        # print("--------- end -------")
-        # print(result_end)
-        await websocket.send_text(result_end)
-
-
 @app.get("/")
 def home():
     return "Hello world"
@@ -183,10 +187,10 @@ def product_design(item: dict):
     prompt_res = translate_client.translate_text(
         Text=item["prompt"], SourceLanguageCode="auto", TargetLanguageCode="en"
     )
-    item["prompt"] = (
-        "3D product render,"
-        + prompt_res["TranslatedText"]
-        + ",finely detailed, purism, ue 5, a computer rendering, minimalism, octane render, 4k"
+    item[
+        "prompt"
+    ] = "3D product render, {p}, finely detailed, purism, ue 5, a computer rendering, minimalism, octane render, 4k".format(
+        p=prompt_res["TranslatedText"]
     )
 
     if item["negative_prompt"]:
