@@ -12,6 +12,7 @@ import uuid
 import json
 import os
 
+# import base64
 
 app = FastAPI()
 
@@ -109,6 +110,23 @@ def sd_resize_image(image: Image.Image, length=768):
     return rtn
 
 
+def get_str(item: dict, key, defaultValue: str | None = None):
+    if key in item and item[key]:
+        return item[key]
+    return defaultValue
+
+
+def get_int(item: dict, key, defaultValue: int | None = None):
+    if key not in item:
+        return defaultValue
+    if not item[key]:
+        return defaultValue
+    try:
+        return int(item[key])
+    except:
+        return defaultValue
+
+
 ext_mimes = {
     ".webp": "image/webp",
     ".jpg": "image/jpeg",
@@ -130,9 +148,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-# src_dir = os.getenv("SRC_DIR")
-# git_username = os.getenv("GIT_USERNAME")
-# git_token = os.getenv("GIT_TOKEN")
+
+
+region = os.environ.get("AWS_DEFAULT_REGION", "us-west-2")
+s3_bucket = os.environ.get("WORKSHOP_IMAGE_BUCKET", "east-ai-workshop")
 
 
 llm_predictor = HuggingFacePredictor(endpoint_name="chatglm2-lmi-model")
@@ -141,14 +160,14 @@ sam_predictor = HuggingFacePredictor(endpoint_name="grounded-sam")
 inpaint_predictor = HuggingFacePredictor(endpoint_name="inpainting-sd")
 
 # stream chat bot
-smr = boto3.client("sagemaker-runtime")
 s3 = boto3.resource("s3")
+smr = boto3.client("sagemaker-runtime", region_name=region)
+bedrock = boto3.client("bedrock-runtime", region_name=region)
 parameters = {"max_length": 4092, "temperature": 0.01, "top_p": 0.8}
 glm_entry_point = "chatglm2-lmi-model"
 
 translate_client = boto3.client("translate")
 
-s3_bucket = os.environ.get("WORKSHOP_IMAGE_BUCKET") or "east-ai-workshop"
 
 patterns = {
     "redbook": "你是一个时尚的年轻人，喜欢用emoji，请根据下面的内容写一段小红书的种草文案: ",
@@ -177,6 +196,55 @@ def write_marketing_text(item: dict):
 @app.get("/")
 def home():
     return "Hello world"
+
+
+@app.post("/api/bedrock-sdxl")
+def bedrock_sdxl(item: dict):
+    prompt_res = translate_client.translate_text(
+        Text=item["prompt"], SourceLanguageCode="auto", TargetLanguageCode="en"
+    )
+    prompt = "3D product render, {p}, finely detailed, purism, ue 5, a computer rendering, minimalism, octane render, 4k".format(
+        p=prompt_res["TranslatedText"]
+    )
+
+    negative_prompt = get_str(item, "negative_prompt")
+
+    if negative_prompt:
+        neg_prompt_res = translate_client.translate_text(
+            Text=negative_prompt,
+            SourceLanguageCode="auto",
+            TargetLanguageCode="en",
+        )
+        negative_prompt = neg_prompt_res["TranslatedText"]
+
+    steps = get_int(item, "steps", 30)
+    # item["seed"] = int(item["seed"]) or -1
+    height = get_int(item, "height", 512)
+    width = get_int(item, "width", 512)
+    # count = int(item["count"]) or 1
+    style_preset = get_str(item, "style_preset", "3d-model")
+    request = json.dumps(
+        {
+            "text_prompts": (
+                [{"text": prompt, "weight": 1.0}]
+                + [{"text": negative_prompt, "weight": -1.0}]
+            ),
+            "cfg_scale": 10,
+            # "seed": -1,
+            "steps": steps,
+            "style_preset": style_preset,
+            "width": width,
+            "height": height,
+        }
+    )
+    modelId = "stability.stable-diffusion-xl"
+    # print(request)
+    response = bedrock.invoke_model(body=request, modelId=modelId)
+    response_body = json.loads(response.get("body").read())
+    return {"images": [response_body["artifacts"][0].get("base64")]}
+    # print(f"{base_64_img_str[0:80]}...")
+    # image_1 = Image.open(io.BytesIO(base64.decodebytes(bytes(base_64_img_str, "utf-8"))))
+    # return image_1
 
 
 @app.post("/api/product-design")
@@ -208,7 +276,7 @@ def product_design(item: dict):
     item["count"] = int(item["count"]) or 1
     item["output_image_dir"] = f"s3://{s3_bucket}/product-images/"
 
-    print(item)
+    # print(item)
     return pd_predictor.predict(item)
 
 
