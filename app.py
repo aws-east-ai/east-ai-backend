@@ -42,7 +42,7 @@ app.include_router(tools_router)
 region = os.environ.get("AWS_DEFAULT_REGION", "us-west-2")
 # s3_bucket = os.environ.get("WORKSHOP_IMAGE_BUCKET", "east-ai-workshop")
 
-# llm_predictor = HuggingFacePredictor(endpoint_name="chatglm2-lmi-model")
+llm_predictor = HuggingFacePredictor(endpoint_name="chatglm2-lmi-model")
 # pd_predictor = HuggingFacePredictor(endpoint_name="product-design-sd")
 # sam_predictor = HuggingFacePredictor(endpoint_name="grounded-sam")
 # inpaint_predictor = HuggingFacePredictor(endpoint_name="inpainting-sd")
