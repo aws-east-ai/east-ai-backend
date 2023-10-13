@@ -30,10 +30,15 @@ class Paint:
         self.router.add_api_route("/api/inpaint", self.inpaint, methods=["POST"])
 
     def product_design(self, item: dict):
-        prompt_res = translate(get_str(item, "prompt", None))
-        prompt = "3D product render, {p}, finely detailed, purism, ue 5, a computer rendering, minimalism, octane render, 4k".format(
-            p=prompt_res
-        )
+        height = get_int(item, "height", 512)
+        width = get_int(item, "width", 512)
+
+        if height % 8 != 0 or width % 8 != 0:
+            return {"error": "height or width must be multiple of 64"}
+        if height > 1024 or width > 1024:
+            return {"error": "height or width must be less than 1024"}
+
+        prompt = translate(get_str(item, "prompt", None))
 
         negative_prompt = get_str(item, "negative_prompt")
 
@@ -44,8 +49,6 @@ class Paint:
 
         steps = get_int(item, "steps", 30)
         seed = get_int(item, "seed", -1)
-        height = get_int(item, "height", 512)
-        width = get_int(item, "width", 512)
         count = get_int(item, "count", 1)
 
         item["prompt"] = prompt
@@ -57,7 +60,7 @@ class Paint:
         item["count"] = count
         item["output_image_dir"] = f"s3://{self.s3_bucket}/product-images/"
 
-        print(item)
+        # print(item)
         return self.pd_predictor.predict(item)
 
     # @app.post("/api/inpaint")
