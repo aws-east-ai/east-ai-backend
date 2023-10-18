@@ -62,7 +62,7 @@ class Bedrock:
         # print(request)
         response = self.bedrock.invoke_model(body=request, modelId=modelId)
         response_body = json.loads(response.get("body").read())
-        print(len(response_body["artifacts"]))
+        #print(len(response_body["artifacts"]))
         return {"images": [response_body["artifacts"][0].get("base64")]}
 
 
