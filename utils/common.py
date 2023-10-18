@@ -1,10 +1,10 @@
-def get_str(item: dict, key, defaultValue: str | None = None):
+def get_str(item: dict, key, defaultValue):
     if key in item and item[key]:
         return item[key]
     return defaultValue
 
 
-def get_int(item: dict, key, defaultValue: int | None = None):
+def get_int(item: dict, key, defaultValue):
     if key not in item:
         return defaultValue
     if not item[key]:
