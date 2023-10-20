@@ -35,7 +35,7 @@ class Bedrock:
         #     p=prompt_res
         # )
 
-        negative_prompt = get_str(item, "negative_prompt")
+        negative_prompt = get_str(item, "negative_prompt", None)
 
         if negative_prompt:
             negative_prompt = translate(negative_prompt)

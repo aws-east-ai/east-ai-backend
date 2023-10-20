@@ -40,7 +40,7 @@ class Paint:
 
         prompt = translate(get_str(item, "prompt", None))
 
-        negative_prompt = get_str(item, "negative_prompt")
+        negative_prompt = get_str(item, "negative_prompt", None)
 
         if negative_prompt:
             negative_prompt = translate(negative_prompt)
