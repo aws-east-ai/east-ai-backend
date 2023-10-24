@@ -8,8 +8,7 @@ from utils.common import get_int, get_str
 
 class Bedrock:
     def __init__(self):
-        region = os.environ.get("AWS_DEFAULT_REGION", "us-west-2")
-        self.bedrock = boto3.client("bedrock-runtime", region_name=region)
+        self.bedrock = boto3.client("bedrock-runtime")
         self.router = APIRouter()
         self.router.add_api_route(
             "/api/bedrock-product-design", self.bedrock_product_design, methods=["POST"]
@@ -62,7 +61,7 @@ class Bedrock:
         # print(request)
         response = self.bedrock.invoke_model(body=request, modelId=modelId)
         response_body = json.loads(response.get("body").read())
-        #print(len(response_body["artifacts"]))
+        # print(len(response_body["artifacts"]))
         return {"images": [response_body["artifacts"][0].get("base64")]}
 
 

@@ -5,10 +5,9 @@ import os
 
 
 ws_router = APIRouter()
+smr = boto3.client("sagemaker-runtime")
+bedrock = boto3.client(service_name="bedrock-runtime")
 
-region = os.environ.get("AWS_DEFAULT_REGION", "us-west-2")
-smr = boto3.client("sagemaker-runtime", region_name=region)
-bedrock = boto3.client(service_name="bedrock-runtime", region_name=region)
 
 patterns = {
     "redbook": "你是一个时尚的年轻人，喜欢用emoji，请根据下面的内容写一段小红书的种草文案: ",
