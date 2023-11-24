@@ -39,4 +39,10 @@ patterns = {
     "zhidemai": "你是一个经验丰富的导购，请根据下面的内容写一段值得买的文章: ",
     "douyin": "你是一个短片导演，请根据下面的内容写一段抖音的拍摄剧本: ",
     "kuaishou": "你是一个短片导演，请根据下面的内容写一段快手的短片剧本: ",
+    "twitter": "Please write a short post on Twitter based on the following tips: ",
+    "instagram": "You are a fashion influencer and love to use emojis, please write a post on Instagram based on the following tips:",
+    "tiktok": "You are a stylish short film director, please write a TikTok shooting script according to the prompts: ",
+    "youtube": "You are a Youtuber, please write a shooting script according to the prompts: ",
+    "medium": "You are a knowledgeable writer and scientist, please follow the tips below to write a long essay, either beautifully written, or with technical depth:",
+    "freestyle": "",
 }
