@@ -20,9 +20,11 @@ from controller.bedrock import bedrock_router
 from controller.paint import paint_router
 from controller.tools import tools_router
 from controller.websocket import ws_router
+from controller.agent import agent_router
 
 app.include_router(home_router)
 app.include_router(bedrock_router)
 app.include_router(paint_router)
 app.include_router(tools_router)
 app.include_router(ws_router)
+app.include_router(agent_router)
