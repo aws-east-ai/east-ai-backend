@@ -15,6 +15,8 @@ class Agent:
         response = parse_task(item["prompt"])
         task_name = response["name"]
 
+        print(response)
+
         if task_name == "image-generator":
             prompts = translate(response["parameters"]["prompts"])
             item = {
@@ -29,7 +31,10 @@ class Agent:
                 "width": 512,
                 "count": 1,
             }
-            return product_design(item)
+            result = product_design(item)
+            result["object"] = response["parameters"]["prompts"]
+            return result
+
         elif response["name"] == "change-background":
             input_image = response["parameters"]["url"]
             sam_prompt = response["parameters"]["object"]
