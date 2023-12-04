@@ -4,6 +4,7 @@ import boto3
 from fastapi import APIRouter
 from utils.aws import translate
 from utils.common import get_int, get_str
+import random
 
 
 class Bedrock:
@@ -15,6 +16,47 @@ class Bedrock:
         )
 
     def bedrock_product_design(self, item: dict):
+        # print(item)
+        if "model_id" in item and item["model_id"] == "bedrock_titan":
+            return self.titan(item)
+        else:
+            return self.sdxl(item)
+
+    def titan(self, item: dict):
+        height = get_int(item, "height", 768)
+        width = get_int(item, "width", 768)
+
+        count = get_int(item, "count", 1)
+        prompt = translate(get_str(item, "prompt", None))
+        negative_prompt = get_str(item, "negative_prompt", None)
+
+        if negative_prompt:
+            negative_prompt = translate(negative_prompt)
+        seed = random.getrandbits(31)
+        seed = seed - 2 if seed > 100 else seed
+        # print(seed)
+        request = json.dumps(
+            {
+                "textToImageParams": {"text": prompt, "negativeText": negative_prompt},
+                "taskType": "TEXT_IMAGE",
+                "imageGenerationConfig": {
+                    "cfgScale": 8,
+                    "seed": seed,
+                    # "seed": 2147483646,
+                    "quality": "standard",
+                    "width": width,
+                    "height": height,
+                    "numberOfImages": count,
+                },
+            }
+        )
+        modelId = "amazon.titan-image-generator-v1"
+        response = self.bedrock.invoke_model(body=request, modelId=modelId)
+
+        response_body = json.loads(response.get("body").read())
+        return response_body
+
+    def sdxl(self, item: dict):
         height = get_int(item, "height", 768)
         width = get_int(item, "width", 768)
 
@@ -30,9 +72,6 @@ class Bedrock:
         count = get_int(item, "count", 1)
 
         prompt = translate(get_str(item, "prompt", None))
-        # prompt = "3D product render, {p}, finely detailed, purism, ue 5, a computer rendering, minimalism, octane render, 4k".format(
-        #     p=prompt_res
-        # )
 
         negative_prompt = get_str(item, "negative_prompt", None)
 
