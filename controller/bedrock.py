@@ -15,11 +15,11 @@ class Bedrock:
         )
 
     def bedrock_product_design(self, item: dict):
-        height = get_int(item, "height", 512)
-        width = get_int(item, "width", 512)
+        height = get_int(item, "height", 768)
+        width = get_int(item, "width", 768)
 
-        if height != 512 and width != 512:
-            return {"error": "height or width must be 512"}
+        # if height != 512 and width != 512:
+        #     return {"error": "height or width must be 512"}
         if height % 64 != 0 or width % 64 != 0:
             return {"error": "height or width must be multiple of 64"}
         if height > 1024 or width > 1024:
@@ -57,7 +57,7 @@ class Bedrock:
                 "count": count,
             }
         )
-        modelId = "stability.stable-diffusion-xl"
+        modelId = "stability.stable-diffusion-xl-v1"
         # print(request)
         response = self.bedrock.invoke_model(body=request, modelId=modelId)
         response_body = json.loads(response.get("body").read())
