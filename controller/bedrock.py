@@ -134,31 +134,48 @@ class Bedrock:
         return texts, sorted(refs.items(), key=lambda x: x[1], reverse=True)
 
     async def kb_summary_content(self, text: str, history):
-        print(text)
+        # print(text)
         result = self.kb_retrieve(text)
-        print(result)
+        # print(result)
         knowledges = "\n\n".join(result[0])
-        prompt = f"""Please answer the question posed in the <question> tag based on the information below,
-    Among them, the content in the <knowledge_base> tag is the content of the local knowledge base, and the knowledge in <search_engine> comes from the internent.
-    Please focus on the knowledge of <knowledge_base>, refer to the content of <search_engine>, and put the answer in the <div> tag.
+
+        temp_prompt = ""
+        if history:
+            for [q, a] in history:
+                a = a.replace("<br />", "\n")
+                a = a[0 : a.rindex("<div class='citations'>")]
+                temp_prompt = temp_prompt + "Human:{q}\n\nAssistant:{a}\n\n".format(
+                    q=q, a=a
+                )
+
+        prompt = f"""Human:<history>{temp_prompt}</history>
+    
+    Please answer the question posed in the 'question' tag based on the information below.
+    Among them, the 'history' tag is the conversation history, 
+    the 'knowledge_base' tag is the knowledge try to answer current question, 
+    and the knowledge in 'search_engine' comes from the internent.
+    Please focus on the knowledge of 'knowledge_base', refer to the content of 'search_engine', 
+    if 'history' is not empty, please focus on the questioner’s intention and whether it is related to 'history'.
 
     <question>{text}</question>
+
 
     <knowledge_base>{knowledges}</knowledge_base>
 
     <search_engine>
-    no results
     </search_engine>
 
-    <div></div>
+    Assistant:
         """
+
+        # print(prompt)
 
         modelId = "anthropic.claude-v2:1"
         accept = "*/*"
         contentType = "application/json"
         body = json.dumps(
             {
-                "prompt": claude2_chat_prompt(prompt, history),
+                "prompt": prompt,
                 "max_tokens_to_sample": 2048,
                 "temperature": 1,
                 "top_p": 0.999,
@@ -179,6 +196,12 @@ class Bedrock:
                     chunk_obj = json.loads(chunk.get("bytes").decode())
                     text = chunk_obj["completion"]
                     yield text
+        yield "<div class='citations'>Citations: "
+        for s3_loc in result[1]:
+            s3_full_loc = s3_loc[0][5:]
+            yield "<a>" + s3_full_loc[s3_full_loc.index("/") + 1 :] + "</a>"
+            yield "\n"
+        yield "</div>"
 
     async def kb_rag_handler(self, item: dict):
         prompt = item["prompt"]
