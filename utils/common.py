@@ -46,3 +46,14 @@ patterns = {
     "medium": "You are a knowledgeable writer and scientist, please follow the tips below to write a long essay, either beautifully written, or with technical depth:",
     "freestyle": "",
 }
+
+
+# history 格式：[[q1, a1], [q2, a2], [...]]
+def claude2_chat_prompt(text, history):
+    if not history:
+        return "Human:{prompt} \n\nAssistant:".format(prompt=text)
+
+    temp_prompt = ""
+    for [q, a] in history:
+        temp_prompt = temp_prompt + "Human:{q}\n\nAssistant:{a}\n\n".format(q=q, a=a)
+    return temp_prompt + "Human:{prompt} \n\nAssistant:".format(prompt=text)

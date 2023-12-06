@@ -2,27 +2,34 @@ import os
 import json
 import boto3
 from fastapi import APIRouter
+from fastapi.responses import StreamingResponse
 from utils.aws import translate
-from utils.common import get_int, get_str
+from utils.common import get_int, get_str, claude2_chat_prompt
 import random
 
 
 class Bedrock:
     def __init__(self):
         self.bedrock = boto3.client("bedrock-runtime")
+        self.bedrock_agent = boto3.client("bedrock-agent-runtime")
+        self.knowledge_base_id = os.environ.get("KNOWLEDGE_BASE_ID")
+        assert self.knowledge_base_id, "Please set env KNOWLEDGE_BASE_ID"
         self.router = APIRouter()
         self.router.add_api_route(
             "/api/bedrock-product-design", self.bedrock_product_design, methods=["POST"]
+        )
+        self.router.add_api_route(
+            "/api/bedrock-rag", self.kb_rag_handler, methods=["POST"]
         )
 
     def bedrock_product_design(self, item: dict):
         # print(item)
         if "model_id" in item and item["model_id"] == "bedrock_titan":
-            return self.titan(item)
+            return self.titan_image(item)
         else:
             return self.sdxl(item)
 
-    def titan(self, item: dict):
+    def titan_image(self, item: dict):
         height = get_int(item, "height", 768)
         width = get_int(item, "width", 768)
 
@@ -102,6 +109,81 @@ class Bedrock:
         response_body = json.loads(response.get("body").read())
         # print(len(response_body["artifacts"]))
         return {"images": [response_body["artifacts"][0].get("base64")]}
+
+    def kb_retrieve(self, text: str):
+        response = self.bedrock_agent.retrieve(
+            knowledgeBaseId=self.knowledge_base_id,
+            retrievalQuery={"text": text},
+            retrievalConfiguration={
+                "vectorSearchConfiguration": {"numberOfResults": 5}
+            },
+            # nextToken="string",
+        )
+        # print(response)
+
+        results = response["retrievalResults"]
+        texts = []
+        refs = {}
+        for result in results:
+            texts.append(result["content"]["text"])
+            s3_url = result["location"]["s3Location"]["uri"]
+            if s3_url in refs:
+                refs[s3_url] = refs[s3_url] + 1
+            else:
+                refs[s3_url] = 1
+        return texts, sorted(refs.items(), key=lambda x: x[1], reverse=True)
+
+    async def kb_summary_content(self, text: str, history):
+        print(text)
+        result = self.kb_retrieve(text)
+        print(result)
+        knowledges = "\n\n".join(result[0])
+        prompt = f"""Please answer the question posed in the <question> tag based on the information below,
+    Among them, the content in the <knowledge_base> tag is the content of the local knowledge base, and the knowledge in <search_engine> comes from the internent.
+    Please focus on the knowledge of <knowledge_base>, refer to the content of <search_engine>, and put the answer in the <div> tag.
+
+    <question>{text}</question>
+
+    <knowledge_base>{knowledges}</knowledge_base>
+
+    <search_engine>
+    no results
+    </search_engine>
+
+    <div></div>
+        """
+
+        modelId = "anthropic.claude-v2:1"
+        accept = "*/*"
+        contentType = "application/json"
+        body = json.dumps(
+            {
+                "prompt": claude2_chat_prompt(prompt, history),
+                "max_tokens_to_sample": 2048,
+                "temperature": 1,
+                "top_p": 0.999,
+                "stop_sequences": ["\n\nHuman:"],
+            }
+        )
+        response = self.bedrock.invoke_model_with_response_stream(
+            body=body,
+            modelId=modelId,
+            accept=accept,
+            contentType=contentType,
+        )
+        stream = response.get("body")
+        if stream:
+            for event in stream:
+                chunk = event.get("chunk")
+                if chunk:
+                    chunk_obj = json.loads(chunk.get("bytes").decode())
+                    text = chunk_obj["completion"]
+                    yield text
+
+    async def kb_rag_handler(self, item: dict):
+        prompt = item["prompt"]
+        history = item["history"] if "history" in item else []
+        return StreamingResponse(self.kb_summary_content(prompt, history))
 
 
 bedrock_router = Bedrock().router

@@ -36,7 +36,7 @@ async def chat_bot(websocket: WebSocket):
             data = await websocket.receive_text()
 
             # TODO: error handle，如果不是 json 格式则会报错
-            print(data)
+            # print(data)
             item = json.loads(data)
             model_id = item["model_id"] if "model_id" in item else "chatglm2"
 
