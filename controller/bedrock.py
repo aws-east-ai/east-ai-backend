@@ -240,7 +240,7 @@ Assistant:
             contentType=contentType,
         )
         response_body = json.loads(response.get("body").read())
-        # print(response_body)
+        print("extract_keywords: ", response_body)
         return json.loads(response_body["completion"])
 
     def google_cse_list(self, q: str):
