@@ -153,6 +153,8 @@ class Bedrock:
         #             q=q, a=a
         #         )
         # prompt = f"""Human:<history>{temp_prompt}</history>
+        # if 'history' is not empty, please focus on the questioner’s intention and whether it is related to 'history'.
+
         prompt = f"""Human:
 
 Please answer the question posed in the 'question' tag based on the information below.
@@ -160,7 +162,6 @@ Among them, the 'history' tag is the conversation history,
 the 'knowledge_base' tag is the knowledge try to answer current question, 
 and the knowledge in 'search_engine' comes from the internent.
 Please focus on the knowledge of 'knowledge_base', refer to the content of 'search_engine', 
-if 'history' is not empty, please focus on the questioner’s intention and whether it is related to 'history'.
 
 <question>{text}</question>
 
@@ -271,13 +272,15 @@ Assistant:
         if self.google_api_key and self.google_cse_cx:
             try:
                 keys = self.extract_keywords(text)
-                print(keys)
+                # print(keys)
                 cses = self.google_cse_list(" ".join(keys))
                 print(cses)
                 se_title = cses[0]["title"]
                 se_link = cses[0]["link"]
                 se_content = self.fetch_url_content(se_link)
-                return se_title, se_link, se_content
+                print(se_link, "的长度:", len(se_content))
+                # return None
+                return se_title, se_link, se_content[0:20000]
             except Exception as e:
                 pass
                 # print(e)
