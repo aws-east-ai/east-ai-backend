@@ -261,7 +261,13 @@ Assistant:
         return []
 
     def fetch_url_content(self, url: str):
-        r = requests.get(url)
+        r = requests.get(
+            url,
+            allow_redirects=True,
+            headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/111.0.0.0 Safari/537.36"
+            },
+        )
         r.encoding = r.apparent_encoding
         soup = BeautifulSoup(r.text, features="html.parser")
         for script in soup(["script", "style", "title"]):
