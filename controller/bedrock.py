@@ -16,7 +16,9 @@ class Bedrock:
         self.bedrock = boto3.client("bedrock-runtime")
         self.bedrock_agent = boto3.client("bedrock-agent-runtime")
         self.knowledge_base_id = os.environ.get("KNOWLEDGE_BASE_ID")
-        assert self.knowledge_base_id, "Please set env KNOWLEDGE_BASE_ID"
+
+        # assert self.knowledge_base_id, "Please set env KNOWLEDGE_BASE_ID"
+
         self.google_api_key = os.environ.get("GOOGLE_API_KEY")
         self.google_cse_cx = os.environ.get("GOOGLE_CSE_CX")
 
@@ -214,10 +216,15 @@ Assistant:
             yield f"<a href='{se_link}' target='_blank'>{se_title}</a>\n"
         yield "</div>"
 
+    async def error_response(self, message):
+        yield message
+
     async def kb_rag_handler(self, item: dict):
-        prompt = item["prompt"]
-        history = item["history"] if "history" in item else []
-        return StreamingResponse(self.kb_summary_content(prompt, history))
+        if self.knowledge_base_id:
+            prompt = item["prompt"]
+            history = item["history"] if "history" in item else []
+            return StreamingResponse(self.kb_summary_content(prompt, history))
+        return StreamingResponse(self.error_response("Bedrock knowledge base id not set."))
 
     def extract_keywords(self, text: str):
         modelId = "anthropic.claude-v2"
