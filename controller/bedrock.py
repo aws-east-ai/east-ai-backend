@@ -216,15 +216,17 @@ Assistant:
             yield f"<a href='{se_link}' target='_blank'>{se_title}</a>\n"
         yield "</div>"
 
-    async def error_response(self, message):
-        yield message
-
     async def kb_rag_handler(self, item: dict):
         if self.knowledge_base_id:
             prompt = item["prompt"]
             history = item["history"] if "history" in item else []
             return StreamingResponse(self.kb_summary_content(prompt, history))
-        return StreamingResponse(self.error_response("Bedrock knowledge base id not set."))
+        else:
+
+            async def error_message():
+                yield "Error: Bedrock knowledge base id not set."
+
+            return StreamingResponse(error_message())
 
     def extract_keywords(self, text: str):
         modelId = "anthropic.claude-v2"
