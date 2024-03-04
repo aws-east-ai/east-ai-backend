@@ -131,27 +131,37 @@ class Bedrock:
 
         results = response["retrievalResults"]
         texts = []
+        urls = []
         refs = {}
         for result in results:
             texts.append(result["content"]["text"])
             s3_url = result["location"]["s3Location"]["uri"]
+            urls.append(s3_url)
             if s3_url in refs:
                 refs[s3_url] = refs[s3_url] + 1
             else:
                 refs[s3_url] = 1
-        return texts, sorted(refs.items(), key=lambda x: x[1], reverse=True)
+        # return texts, sorted(refs.items(), key=lambda x: x[1], reverse=True)
+        return texts, urls
 
     async def kb_summary_content(self, text: str, history):
         se_title, se_link, se_content = self.google_top_article(text)
         result = self.kb_retrieve(text)
+        # print(se_link)
         # knowledges = "\n\n".join(result[0])
         search_result = result[0]
         knowledges = ""
+        if se_content:
+            knowledges += f"""
+  <search_result>
+    <content>{se_content}</content>
+    <source>0</source>
+  </search_result>"""
         for i in range(len(search_result)):
             knowledges += f"""
   <search_result>
     <content>{search_result[i]}</content>
-    <source>${i+1}</source>
+    <source>{i+1}</source>
   </search_result>"""
 
         prompt = f"""
@@ -167,22 +177,22 @@ Here is the user's question:
 </question>
 
 If you reference information from a search result within your answer, you must include a citation to source where the information was found. Each result has a corresponding source ID that you should reference. Please output your answer in the following format:
-<answer>
-  <answer_part>
-    <text>first answer text</text>
-    <sources>
-      <source>source ID</source>
-    </sources>
-  </answer_part>
-  <answer_part>
-    <text>second answer text</text>
-    <sources>
-      <source>source ID</source>
-    </sources>
-  </answer_part>
-</answer>
+<div meaning='answer'>
+  <span meaning='answer_part'>
+    <span>first answer text</span>
+    <span meaning='sources'>
+      <sup meaning='source'>source ID</sup>
+    </span>
+  </span>
+  <span meaning='answer_part'>
+    <span>first answer text</span>
+    <span meaning='sources'>
+      <upper meaning='source'>source ID</upper>
+    </span>
+  </span>
+</div>
 
-Note that <sources> may contain multiple <source> if you include information from multiple results in your answer.
+Note that <upper meaning='source'> may contain multiple <source> if you include information from multiple results in your answer.
 
 Do NOT directly quote the <search_results> in your answer. Your job is to answer the <question> as concisely as possible.
 
@@ -190,7 +200,8 @@ Assistant:
 
 """
 
-        # dangerouslySetInnerHTML={{ __html: message }}
+        # print(prompt)
+        #
 
         #         prompt = f"""Human:
 
@@ -240,14 +251,18 @@ Assistant:
                     chunk_obj = json.loads(chunk.get("bytes").decode())
                     text = chunk_obj["completion"]
                     yield text
+                    # print(text, end="")
+
         yield "<div class='citations'>Citations: "
-        for s3_loc in result[1]:
+        if se_link:
+            yield f"<span>0</span> <a href='{se_link}' target='_blank'>{se_title[0:15]}...{se_title[-15:]}</a><br />"
+        refs = result[1]
+        for i in range(len(refs)):
             # s3_full_loc = s3_loc[0][5:]
             # yield "<a>" + s3_full_loc[s3_full_loc.index("/") + 1 :] + "</a>"
-            yield f"<a>{s3_loc[0]}</a>"
+            yield f"<span>{i+1}</span> <a>{refs[i][0:10]}...{refs[i][-20:]}</a><br />"
             yield "\n"
-        if se_link:
-            yield f"<a href='{se_link}' target='_blank'>{se_title}</a>\n"
+
         yield "</div>"
 
     async def kb_rag_handler(self, item: dict):
