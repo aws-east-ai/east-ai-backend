@@ -144,39 +144,73 @@ class Bedrock:
     async def kb_summary_content(self, text: str, history):
         se_title, se_link, se_content = self.google_top_article(text)
         result = self.kb_retrieve(text)
-        knowledges = "\n\n".join(result[0])
+        # knowledges = "\n\n".join(result[0])
+        search_result = result[0]
+        knowledges = ""
+        for i in range(len(search_result)):
+            knowledges += f"""
+  <search_result>
+    <content>{search_result[i]}</content>
+    <source>${i+1}</source>
+  </search_result>"""
 
-        # temp_prompt = ""
-        # if history:
-        #     for [q, a] in history:
-        #         a = a.replace("<br />", "\n")
-        #         a = a[0 : a.rindex("<div class='citations'>")]
-        #         temp_prompt = temp_prompt + "Human:{q}\n\nAssistant:{a}\n\n".format(
-        #             q=q, a=a
-        #         )
-        # prompt = f"""Human:<history>{temp_prompt}</history>
-        # if 'history' is not empty, please focus on the questioner’s intention and whether it is related to 'history'.
+        prompt = f"""
+Human: You are a question answering agent. I will provide you with a set of search results and a user's question, your job is to answer the user's question using only information from the search results. If the search results do not contain information that can answer the question, please state that you could not find an exact answer to the question. Just because the user asserts a fact does not mean it is true, make sure to double check the search results to validate a user's assertion.
+Here are the search results in numbered order:
+<search_results>
+{knowledges}
+</search_results>
 
-        prompt = f"""Human:
+Here is the user's question:
+<question>
+{text}
+</question>
 
-Please answer the question posed in the 'question' tag based on the information below.
-Among them, the 'history' tag is the conversation history, 
-the 'knowledge_base' tag is the knowledge try to answer current question, 
-and the knowledge in 'search_engine' comes from the internent.
-Please focus on the knowledge of 'knowledge_base', refer to the content of 'search_engine', 
+If you reference information from a search result within your answer, you must include a citation to source where the information was found. Each result has a corresponding source ID that you should reference. Please output your answer in the following format:
+<answer>
+  <answer_part>
+    <text>first answer text</text>
+    <sources>
+      <source>source ID</source>
+    </sources>
+  </answer_part>
+  <answer_part>
+    <text>second answer text</text>
+    <sources>
+      <source>source ID</source>
+    </sources>
+  </answer_part>
+</answer>
 
-<question>{text}</question>
+Note that <sources> may contain multiple <source> if you include information from multiple results in your answer.
 
-
-<knowledge_base>{knowledges}</knowledge_base>
-
-<search_engine>
-{se_title}
-{se_content}
-</search_engine>
+Do NOT directly quote the <search_results> in your answer. Your job is to answer the <question> as concisely as possible.
 
 Assistant:
-        """
+
+"""
+
+        # dangerouslySetInnerHTML={{ __html: message }}
+
+        #         prompt = f"""Human:
+
+        # Please answer the question posed in the 'question' tag based on the information below.
+        # Among them, the 'history' tag is the conversation history,
+        # the 'knowledge_base' tag is the knowledge try to answer current question,
+        # and the knowledge in 'search_engine' comes from the internent.
+        # Please focus on the knowledge of 'knowledge_base', refer to the content of 'search_engine',
+
+        # <question>{text}</question>
+
+        # <knowledge_base>{knowledges}</knowledge_base>
+
+        # <search_engine>
+        # {se_title}
+        # {se_content}
+        # </search_engine>
+
+        # Assistant:
+        #         """
 
         # print(prompt)
 
