@@ -152,7 +152,7 @@ class Bedrock:
         if se_content:
             search_result.append(se_content)
 
-        # strmSummary = claude3_summuary_kb(self.bedrock, text, search_result)
+        # strmSummary = claude2_summuary_kb(self.bedrock, text, search_result)
         strmSummary = claude3_summuary_kb(self.bedrock, text, search_result)
 
         while True:
