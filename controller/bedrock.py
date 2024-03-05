@@ -9,6 +9,7 @@ import random
 from googleapiclient.discovery import build
 import requests
 from bs4 import BeautifulSoup
+from utils.kb import claude3_summuary_kb, claude2_summuary_kb
 
 
 class Bedrock:
@@ -147,111 +148,18 @@ class Bedrock:
     async def kb_summary_content(self, text: str, history):
         se_title, se_link, se_content = self.google_top_article(text)
         result = self.kb_retrieve(text)
-        # print(se_link)
-        # knowledges = "\n\n".join(result[0])
         search_result = result[0]
-        knowledges = ""
         if se_content:
-            knowledges += f"""
-  <search_result>
-    <content>{se_content}</content>
-    <source>0</source>
-  </search_result>"""
-        for i in range(len(search_result)):
-            knowledges += f"""
-  <search_result>
-    <content>{search_result[i]}</content>
-    <source>{i+1}</source>
-  </search_result>"""
+            search_result.append(se_content)
 
-        prompt = f"""
-Human: You are a question answering agent. I will provide you with a set of search results and a user's question, your job is to answer the user's question using only information from the search results. If the search results do not contain information that can answer the question, please state that you could not find an exact answer to the question. Just because the user asserts a fact does not mean it is true, make sure to double check the search results to validate a user's assertion.
-Here are the search results in numbered order:
-<search_results>
-{knowledges}
-</search_results>
+        # strmSummary = claude3_summuary_kb(self.bedrock, text, search_result)
+        strmSummary = claude3_summuary_kb(self.bedrock, text, search_result)
 
-Here is the user's question:
-<question>
-{text}
-</question>
-
-If you reference information from a search result within your answer, you must include a citation to source where the information was found. Each result has a corresponding source ID that you should reference. Please output your answer in the following format:
-<div meaning='answer'>
-  <span meaning='answer_part'>
-    <span>first answer text</span>
-    <span meaning='sources'>
-      <sup meaning='source'>source ID</sup>
-    </span>
-  </span>
-  <span meaning='answer_part'>
-    <span>first answer text</span>
-    <span meaning='sources'>
-      <upper meaning='source'>source ID</upper>
-    </span>
-  </span>
-</div>
-
-Note that <upper meaning='source'> may contain multiple <source> if you include information from multiple results in your answer.
-
-Do NOT directly quote the <search_results> in your answer. Your job is to answer the <question> as concisely as possible.
-
-Assistant:
-
-"""
-
-        # print(prompt)
-        #
-
-        #         prompt = f"""Human:
-
-        # Please answer the question posed in the 'question' tag based on the information below.
-        # Among them, the 'history' tag is the conversation history,
-        # the 'knowledge_base' tag is the knowledge try to answer current question,
-        # and the knowledge in 'search_engine' comes from the internent.
-        # Please focus on the knowledge of 'knowledge_base', refer to the content of 'search_engine',
-
-        # <question>{text}</question>
-
-        # <knowledge_base>{knowledges}</knowledge_base>
-
-        # <search_engine>
-        # {se_title}
-        # {se_content}
-        # </search_engine>
-
-        # Assistant:
-        #         """
-
-        # print(prompt)
-
-        modelId = "anthropic.claude-v2"
-        accept = "*/*"
-        contentType = "application/json"
-        body = json.dumps(
-            {
-                "prompt": prompt,
-                "max_tokens_to_sample": 2048,
-                "temperature": 1,
-                "top_p": 0.999,
-                "stop_sequences": ["\n\nHuman:"],
-            }
-        )
-        response = self.bedrock.invoke_model_with_response_stream(
-            body=body,
-            modelId=modelId,
-            accept=accept,
-            contentType=contentType,
-        )
-        stream = response.get("body")
-        if stream:
-            for event in stream:
-                chunk = event.get("chunk")
-                if chunk:
-                    chunk_obj = json.loads(chunk.get("bytes").decode())
-                    text = chunk_obj["completion"]
-                    yield text
-                    # print(text, end="")
+        while True:
+            try:
+                yield next(strmSummary)
+            except StopIteration:
+                break
 
         yield "<div class='citations'>Citations: "
         if se_link:
