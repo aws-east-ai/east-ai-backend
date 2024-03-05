@@ -63,11 +63,9 @@ def claude3_summuary_kb(bedrock, question, kb_contents):
     )
 
     stream = response.get("body")
-    print(stream)
     if stream:
         for event in stream:
             chunk = event.get("chunk")
-            print(chunk)
             if chunk:
                 chunk_obj = json.loads(chunk.get("bytes").decode())
                 if chunk_obj["type"] == "content_block_delta":
