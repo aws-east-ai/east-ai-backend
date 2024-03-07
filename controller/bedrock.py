@@ -153,6 +153,7 @@ class Bedrock:
             search_result.append(se_content)
 
         # strmSummary = claude2_summuary_kb(self.bedrock, text, search_result)
+        # print(search_result)
         strmSummary = claude3_summuary_kb(self.bedrock, text, search_result)
 
         while True:
@@ -162,14 +163,14 @@ class Bedrock:
                 break
 
         yield "<div class='citations'>Citations: "
-        if se_link:
-            yield f"<span>0</span> <a href='{se_link}' target='_blank'>{se_title[0:15]}...{se_title[-15:]}</a><br />"
         refs = result[1]
         for i in range(len(refs)):
             # s3_full_loc = s3_loc[0][5:]
             # yield "<a>" + s3_full_loc[s3_full_loc.index("/") + 1 :] + "</a>"
             yield f"<span>{i+1}</span> <a>{refs[i][0:10]}...{refs[i][-20:]}</a><br />"
             yield "\n"
+        if se_link:
+            yield f"<span>6</span> <a href='{se_link}' target='_blank'>{se_title[0:15]}...{se_title[-15:]}</a><br />"
 
         yield "</div>"
 
