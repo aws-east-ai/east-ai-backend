@@ -2,6 +2,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 import json
 import boto3
 import os
+from utils.bot import claude2_bot, claude3_bot
 
 
 ws_router = APIRouter()
@@ -52,7 +53,11 @@ async def chat_bot(websocket: WebSocket):
             if model_id == "chatglm2":
                 await ask_chatglm2(websocket, prompt, history)
             elif model_id == "bedrock_claude2":
-                await ask_bedrock_claude2(websocket, prompt, history)
+                # await ask_bedrock_claude2(websocket, prompt, history)
+                await claude2_bot(bedrock, websocket, prompt, history)
+            elif model_id == "bedrock_claude3":
+                # await ask_bedrock_claude2(websocket, prompt, history)
+                await claude3_bot(bedrock, websocket, prompt, history)
     except WebSocketDisconnect:
         print(f"Client left")
 
