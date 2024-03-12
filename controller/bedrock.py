@@ -10,6 +10,8 @@ from googleapiclient.discovery import build
 import requests
 from bs4 import BeautifulSoup
 from utils.kb import claude3_summuary_kb, claude2_summuary_kb
+import av
+import base64
 
 
 class Bedrock:
@@ -213,7 +215,8 @@ class Bedrock:
 
     def google_cse_list(self, q: str):
         if self.google_api_key and self.google_cse_cx:
-            service = build("customsearch", "v1", developerKey=self.google_api_key)
+            service = build("customsearch", "v1",
+                            developerKey=self.google_api_key)
             res = (
                 service.cse()
                 .list(
@@ -259,6 +262,89 @@ class Bedrock:
                 # print(e)
 
         return None, None, None
+
+    def extract_video_keyframes(self, video_url: str, output_dir='./tmp/keyframes'):
+        s3_client = boto3.resource('s3')
+        lst = video_url.split('/')
+        bucket = lst[2]
+        key = '/'.join(lst[3:])
+        obj = './tmp/video/' + lst[-1]
+        s3_client.meta.client.download_file(bucket, key, obj)
+
+        with av.open(obj) as container:
+            stream = container.streams.video[0]
+            stream.codec_context.skip_frame = 'NONKEY'
+            for frame in container.decode(stream):
+                frame.to_image().save(os.path.join(
+                    output_dir, 'temporary-image-{:04d}.png'.format(frame.pts)))
+        return output_dir
+
+    def invoke_claude3(self, keyframes_dir: str, stream=False):
+        image_lst = os.listdir(keyframes_dir)
+        image_lst = [keyframes_dir + '/' + image for image in image_lst if not image.startswith(
+            "temporary-image-00")]
+        bedrock_runtime = boto3.client(service_name='bedrock-runtime')
+        model_id = 'anthropic.claude-3-sonnet-20240229-v1:0'
+        max_tokens = 1024
+        system = "请用中文回答。"
+        content = []
+        for image in image_lst[:20]:
+            with open(image, "rb") as image_file:
+                content_image = base64.b64encode(
+                    image_file.read()).decode('utf8')
+            ct = {
+                "type": "image", "source": {"type": "base64", "media_type": "image/png", "data": content_image}
+            }
+            content.append(ct)
+        content.append(
+            {"type": "text", "text": "你是一个阅片无数的动漫以及视频博主。这些图片来自于视频的剪辑，请识别出视频中的角色，并讲述该视频发生了什么故事。使用以下文字作为开头进行回答：该视频讲述了"})
+        messages = [{
+            "role": "user",
+            "content": content
+        }]
+        body = json.dumps(
+            {
+                "system": system,
+                "anthropic_version": "bedrock-2023-05-31",
+                "max_tokens": max_tokens,
+                "messages": messages
+            }
+        )
+
+        if stream:
+            response = bedrock_runtime.invoke_model_with_response_stream(
+                body=body, modelId=model_id)
+
+            for event in response.get("body"):
+                chunk = json.loads(event["chunk"]["bytes"])
+
+                if chunk['type'] == 'message_delta':
+                    print(f"\nStop reason: {chunk['delta']['stop_reason']}")
+                    print(f"Stop sequence: {chunk['delta']['stop_sequence']}")
+                    print(f"Output tokens: {chunk['usage']['output_tokens']}")
+
+                if chunk['type'] == 'content_block_delta':
+                    if chunk['delta']['type'] == 'text_delta':
+                        print(chunk['delta']['text'], end="")
+        else:
+            response = bedrock_runtime.invoke_model(
+                body=body, modelId=model_id)
+            response_body = json.loads(response.get('body').read())
+            text = response_body['content'][0]['text']
+            return text
+
+    def video_summary(self, video_url):
+        if not os.path.exists('./tmp'):
+            os.makedirs('./tmp')
+            os.makedirs('./tmp/video')
+            os.makedirs('./tmp/keyframes')
+        else:
+            os.system("rm -rf ./tmp/video")
+            os.system("rm -rf ./tmp/keyframes")
+            os.makedirs('./tmp/video')
+            os.makedirs('./tmp/keyframes')
+        keyframes_dir = self.extract_video_keyframes(video_url)
+        self.invoke_claude3(keyframes_dir, stream=True)
 
 
 bedrock_router = Bedrock().router

@@ -65,3 +65,4 @@ urllib3==1.26.16
 uvicorn==0.23.2
 websockets==11.0.3
 zipp==3.16.2
+av==11.0.0
