@@ -64,8 +64,23 @@ async def chat_bot(websocket: WebSocket):
         print(f"Client left")
 
 
+def build_prompt_chatglm3(question, history):
+    prompt = ""
+    for [q, a] in history:
+        prompt += f"\n\n用户：{q}"
+        prompt += f"\n\nChatGLM3-6B：{a}"
+
+    prompt += f"\n\n用户：{question}"
+    prompt += f"\n\nChatGLM3-6B："
+    return prompt
+
+
 async def ask_chatglm3(websocket: WebSocket, prompt: str, history):
     parameters = {"max_length": 4092, "temperature": 0.01, "top_p": 0.8}
+
+    prompt = build_prompt_chatglm3(prompt, history)
+    # print(prompt)
+    history = []
 
     response_model = smr.invoke_endpoint_with_response_stream(
         EndpointName="chatglm3-lmi-model",
